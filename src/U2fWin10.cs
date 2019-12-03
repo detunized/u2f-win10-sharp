@@ -54,8 +54,6 @@ namespace U2fWin10
                 Marshal.Copy(assertion.pbAuthenticatorData + assertion.cbAuthenticatorData - 5, signature, 0, 5);
                 Marshal.Copy(assertion.pbSignature, signature, 5, assertion.cbSignature);
 
-                var d = assertion.pbSignature.ToInt64() - assertionPtr.ToInt64();
-
                 return signature;
             }
             finally
