@@ -8,54 +8,82 @@ namespace U2fWin10
 {
     public static class U2f
     {
+        // TODO: Support multiple keys
         public static byte[] Sign(string appId, byte[] challenge, byte[] keyHandle)
         {
+            return Sign(appId, challenge, keyHandle, GetForegroundWindow());
+        }
+
+        public static byte[] Sign(string appId, byte[] challenge, byte[] keyHandle, IntPtr windowHandle)
+        {
+            // It's all a bit ugly here with the unmanaged memory management.
+            // It's easier to allocate all at the top and then free when we're
+            // done instead of having each data structure manage its own memory.
+            // Some objects exist only in the managed heap, some entirely in the
+            // unmanaged and some have parts in both. This makes it very
+            // difficult to track nested structures with IntPtr's in them that
+            // have to be freed.
+
+            // TODO: SHA-256 the challenge
             var challengePtr = CopyToUnmanaged(challenge);
             var keyHandlePtr = CopyToUnmanaged(keyHandle);
-            var credentialPtr = CopyToUnmanaged(new WEBAUTHN_CREDENTIAL { cbId = keyHandle.Length, pbId = keyHandlePtr });
+            var credentialPtr = CopyToUnmanaged(new WEBAUTHN_CREDENTIAL(keyHandle.Length, keyHandlePtr));
 
-            // TODO: Remove
+            // TODO: Move this to the test
             var size = Marshal.SizeOf<WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS>();
-            if (size != 88)
+            if (!((IntPtr.Size == 8 && size == 88) || (IntPtr.Size == 4 && size == 52)))
                 throw new InvalidOperationException();
 
-            var result = WebAuthNAuthenticatorGetAssertion(GetForegroundWindow(),
-                                                   appId,
-                                                   new WEBAUTHN_CLIENT_DATA() { cbClientDataJSON = challenge.Length, pbClientDataJSON = challengePtr } ,
-                                                   new WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS()
-                                                   {
-                                                       CredentialList = new WEBAUTHN_CREDENTIALS
-                                                       {
-                                                           cCredentials = 1,
-                                                           pCredentials = credentialPtr,
-                                                       }
-                                                   },
-                                                   out var assertion);
+            try
+            {
+                var result = WebAuthNAuthenticatorGetAssertion(
+                    windowHandle,
+                    appId,
+                    new WEBAUTHN_CLIENT_DATA(challenge.Length, challengePtr),
+                    new WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS(1, credentialPtr),
+                    out var assertion);
 
-            Marshal.FreeHGlobal(credentialPtr);
-            Marshal.FreeHGlobal(keyHandlePtr);
-            Marshal.FreeHGlobal(challengePtr);
-            Marshal.FreeHGlobal(assertion);
+                FreeUnmanaged(ref assertion);
+            }
+            finally
+            {
+                FreeUnmanaged(ref credentialPtr);
+                FreeUnmanaged(ref keyHandlePtr);
+                FreeUnmanaged(ref challengePtr);
+            }
 
             return null;
         }
 
-        private static IntPtr CopyToUnmanaged(byte[] src)
+        //
+        // Internal
+        //
+
+        internal static IntPtr CopyToUnmanaged(byte[] src)
         {
             var ptr = Marshal.AllocHGlobal(src.Length);
             Marshal.Copy(src, 0, ptr, src.Length);
             return ptr;
         }
 
-        private static IntPtr CopyToUnmanaged<T>(T src)
+        internal static IntPtr CopyToUnmanaged<T>(T src)
         {
             var ptr = Marshal.AllocHGlobal(Marshal.SizeOf<T>());
             Marshal.StructureToPtr(src, ptr, false);
             return ptr;
         }
 
+        internal static void FreeUnmanaged(ref IntPtr ptr)
+        {
+            if (ptr != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(ptr);
+                ptr = IntPtr.Zero;
+            }
+        }
+
         //
-        // Internal
+        // Windows API P/Invoke
         //
 
         [DllImport("user32.dll")]
@@ -77,101 +105,125 @@ namespace U2fWin10
 
         // Information about client data.
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        internal class WEBAUTHN_CLIENT_DATA
+        internal sealed class WEBAUTHN_CLIENT_DATA
         {
             // Version of this structure, to allow for modifications in the future.
             // This field is required and should be set to CURRENT_VERSION above.
-            public readonly /* DWORD */ int dwVersion = 1;
+            private /* DWORD */ int dwVersion = 1;
 
             // Size of the pbClientDataJSON field.
-            public /* DWORD */ int cbClientDataJSON;
+            private /* DWORD */ int cbClientDataJSON;
 
             // UTF-8 encoded JSON serialization of the client data.
-            public /* PBYTE */ IntPtr pbClientDataJSON;
+            private /* PBYTE */ IntPtr pbClientDataJSON;
 
             // Hash algorithm ID used to hash the pbClientDataJSON field.
-            public readonly /* LPCWSTR */ string pwszHashAlgId = "SHA-256";
+            private /* LPCWSTR */ string pwszHashAlgId = "SHA-256";
+
+            public WEBAUTHN_CLIENT_DATA(int length, IntPtr ptr)
+            {
+                cbClientDataJSON = length;
+                pbClientDataJSON = ptr;
+            }
         }
 
+        // Options.
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        internal class WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS
+        internal sealed class WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS
         {
             // Version of this structure, to allow for modifications in the future.
-            public /* DWORD */ int dwVersion = 4; // WEBAUTHN_AUTHENTICATOR_ATTACHMENT_CROSS_PLATFORM_U2F_V2
+            private /* DWORD */ int dwVersion = 4; // WEBAUTHN_AUTHENTICATOR_ATTACHMENT_CROSS_PLATFORM_U2F_V2
 
             // Time that the operation is expected to complete within.
             // This is used as guidance, and can be overridden by the platform.
-            public /* DWORD */ int dwTimeoutMilliseconds = 30_000; // 30 seconds
+            private /* DWORD */ int dwTimeoutMilliseconds = 30_000; // 30 seconds
 
             // Allowed Credentials List.
-            public /* WEBAUTHN_CREDENTIALS */ WEBAUTHN_CREDENTIALS CredentialList;
+            private /* WEBAUTHN_CREDENTIALS */ WEBAUTHN_CREDENTIALS CredentialList;
 
             // Optional extensions to parse when performing the operation.
-            public /* WEBAUTHN_EXTENSIONS */ WEBAUTHN_EXTENSIONS Extensions = new WEBAUTHN_EXTENSIONS { cExtensions = 0, pExtensions = IntPtr.Zero };
+            private /* WEBAUTHN_EXTENSIONS */ WEBAUTHN_EXTENSIONS Extensions = new WEBAUTHN_EXTENSIONS();
 
             // Optional. Platform vs Cross-Platform Authenticators.
-            public /* DWORD */ int dwAuthenticatorAttachment = 3; // WEBAUTHN_AUTHENTICATOR_ATTACHMENT_CROSS_PLATFORM_U2F_V2
+            private /* DWORD */ int dwAuthenticatorAttachment = 3; // WEBAUTHN_AUTHENTICATOR_ATTACHMENT_CROSS_PLATFORM_U2F_V2
 
             // User Verification Requirement.
-            public /* DWORD */ int dwUserVerificationRequirement = 3; // WEBAUTHN_USER_VERIFICATION_REQUIREMENT_DISCOURAGED
+            private /* DWORD */ int dwUserVerificationRequirement = 3; // WEBAUTHN_USER_VERIFICATION_REQUIREMENT_DISCOURAGED
 
             // Reserved for future Use
-            public /* DWORD */ int dwFlags = 0;
+            private /* DWORD */ int dwFlags = 0;
 
             //
             // The following fields have been added in WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_2
             //
 
             // Optional identifier for the U2F AppId. Converted to UTF8 before being hashed. Not lower cased.
-            public /* PCWSTR */ string pwszU2fAppId = null; // Not used in U2F
+            private /* PCWSTR */ string pwszU2fAppId = null; // Not used in U2F
 
             // If the following is non-NULL, then, set to TRUE if the above pwszU2fAppid was used instead of
             // PCWSTR pwszRpId;
-            public /* BOOL* */ IntPtr pbU2fAppId = IntPtr.Zero; // Not used in U2F
+            private /* BOOL* */ IntPtr pbU2fAppId = IntPtr.Zero; // Not used in U2F
 
             //
             // The following fields have been added in WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_3
             //
 
             // Cancellation Id - Optional - See WebAuthNGetCancellationId
-            public /* GUID* */ IntPtr pCancellationId = IntPtr.Zero; // Not used in U2F
+            private /* GUID* */ IntPtr pCancellationId = IntPtr.Zero; // Not used in U2F
 
             //
             // The following fields have been added in WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_4
             //
 
             // Allow Credential List. If present, "CredentialList" will be ignored.
-            public /* PWEBAUTHN_CREDENTIAL_LIST */ IntPtr pAllowCredentialList = IntPtr.Zero; // Not used in U2F
+            private /* PWEBAUTHN_CREDENTIAL_LIST */ IntPtr pAllowCredentialList = IntPtr.Zero; // Not used in U2F
+
+            public WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS(int numCredentials, IntPtr unmanagedCredentialsBlob)
+            {
+                CredentialList = new WEBAUTHN_CREDENTIALS(numCredentials, unmanagedCredentialsBlob);
+            }
         }
-    }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    internal class WEBAUTHN_CREDENTIAL
-    {
-        // Version of this structure, to allow for modifications in the future.
-        public /* DWORD */ int dwVersion = 1;
+        [StructLayout(LayoutKind.Sequential)]
+        internal class WEBAUTHN_CREDENTIALS
+        {
+            private /* DWORD */ int cCredentials;
+            private /* PWEBAUTHN_CREDENTIAL */ IntPtr pCredentials;
 
-        // Size of pbID.
-        public /* DWORD */ int cbId;
+            public WEBAUTHN_CREDENTIALS(int numCredentials, IntPtr unmanagedCredentialsBlob)
+            {
+                cCredentials = numCredentials;
+                pCredentials = unmanagedCredentialsBlob;
+            }
+        }
 
-        // Unique ID for this particular credential.
-        public /* PBYTE */ IntPtr pbId;
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        internal class WEBAUTHN_CREDENTIAL
+        {
+            // Version of this structure, to allow for modifications in the future.
+            private /* DWORD */ int dwVersion = 1;
 
-        // Well-known credential type specifying what this particular credential is.
-        public /* LPCWSTR */ string pwszCredentialType = "public-key";
-    }
+            // Size of pbID.
+            private /* DWORD */ int cbId;
 
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct WEBAUTHN_CREDENTIALS
-    {
-        public /* DWORD */ int cCredentials;
-        public /* PWEBAUTHN_CREDENTIAL */ IntPtr pCredentials;
-    }
+            // Unique ID for this particular credential.
+            private /* PBYTE */ IntPtr pbId;
 
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct WEBAUTHN_EXTENSIONS
-    {
-        public /* DWORD */ int cExtensions;
-        public /* PWEBAUTHN_EXTENSION */ IntPtr pExtensions;
+            // Well-known credential type specifying what this particular credential is.
+            private /* LPCWSTR */ string pwszCredentialType = "public-key";
+
+            public WEBAUTHN_CREDENTIAL(int numBytes, IntPtr unmangedBytes)
+            {
+                cbId = numBytes;
+                pbId = unmangedBytes;
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal class WEBAUTHN_EXTENSIONS
+        {
+            private /* DWORD */ int cExtensions = 0;
+            private /* PWEBAUTHN_EXTENSION */ IntPtr pExtensions = IntPtr.Zero;
+        }
     }
 }
