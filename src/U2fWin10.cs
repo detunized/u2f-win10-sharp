@@ -9,6 +9,7 @@ namespace U2fWin10
     public static class U2f
     {
         // TODO: Support multiple keys
+        // TODO: Report errors
         public static byte[] Sign(string appId, byte[] challenge, byte[] keyHandle)
         {
             return Sign(appId, challenge, keyHandle, GetForegroundWindow());
@@ -28,6 +29,7 @@ namespace U2fWin10
             var challengePtr = CopyToUnmanaged(challenge);
             var keyHandlePtr = CopyToUnmanaged(keyHandle);
             var credentialPtr = CopyToUnmanaged(new WEBAUTHN_CREDENTIAL(keyHandle.Length, keyHandlePtr));
+            var assertionPtr = IntPtr.Zero;
 
             // TODO: Move this to the test
             var size = Marshal.SizeOf<WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS>();
@@ -41,18 +43,28 @@ namespace U2fWin10
                     appId,
                     new WEBAUTHN_CLIENT_DATA(challenge.Length, challengePtr),
                     new WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS(1, credentialPtr),
-                    out var assertion);
+                    out assertionPtr);
 
-                FreeUnmanaged(ref assertion);
+                if (result != WebAuthnResult.Ok || assertionPtr == IntPtr.Zero)
+                    return null;
+
+                var assertion = Marshal.PtrToStructure<WEBAUTHN_ASSERTION>(assertionPtr);
+
+                var signature = new byte[assertion.cbSignature + 5];
+                Marshal.Copy(assertion.pbAuthenticatorData + assertion.cbAuthenticatorData - 5, signature, 0, 5);
+                Marshal.Copy(assertion.pbSignature, signature, 5, assertion.cbSignature);
+
+                var d = assertion.pbSignature.ToInt64() - assertionPtr.ToInt64();
+
+                return signature;
             }
             finally
             {
+                FreeUnmanaged(ref assertionPtr);
                 FreeUnmanaged(ref credentialPtr);
                 FreeUnmanaged(ref keyHandlePtr);
                 FreeUnmanaged(ref challengePtr);
             }
-
-            return null;
         }
 
         //
@@ -224,6 +236,34 @@ namespace U2fWin10
         {
             private /* DWORD */ int cExtensions = 0;
             private /* PWEBAUTHN_EXTENSION */ IntPtr pExtensions = IntPtr.Zero;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        internal class WEBAUTHN_ASSERTION
+        {
+            // Version of this structure, to allow for modifications in the future.
+            public /* DWORD */ int dwVersion;
+
+            // Size of cbAuthenticatorData.
+            public /* DWORD */ int cbAuthenticatorData;
+
+            // Authenticator data that was created for this assertion.
+            public /* PBYTE */ IntPtr pbAuthenticatorData;
+
+            // Size of pbSignature.
+            public /* DWORD */ int cbSignature;
+
+            // Signature that was generated for this assertion.
+            public /* PBYTE */ IntPtr pbSignature;
+
+            // Credential that was used for this assertion.
+            public /* WEBAUTHN_CREDENTIAL */ WEBAUTHN_CREDENTIAL Credential;
+
+            // Size of User Id
+            public /* DWORD */ int cbUserId;
+
+            // UserId
+            public /* PBYTE */ IntPtr pbUserId;
         }
     }
 }
