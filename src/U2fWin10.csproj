@@ -2,5 +2,12 @@
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <RootNamespace>U2fWin10</RootNamespace>
+
+    <!-- NuGet -->
+    <PackageId>U2fWin10</PackageId>
+    <Version>1.0.0-preview1</Version>
+    <Authors>Dmitry Yakimenko</Authors>
+    <Company>detunized.net</Company>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 </Project>
