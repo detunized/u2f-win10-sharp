@@ -1,5 +1,7 @@
 # U2F host library for Windows 10
 
+![](https://github.com/detunized/u2f-win10-sharp/workflows/CI/badge.svg)
+
 This library wraps the native WebAuthn host API released in Windows 10 build
 1903. There are a few pure .NET and wrapped native libraries that aim to
 provide similar functionality available on GitHub. The problem with those
