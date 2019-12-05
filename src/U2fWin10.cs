@@ -2,7 +2,10 @@
 // Licensed under the terms of the MIT license. See LICENCE for details.
 
 using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+
+[assembly: InternalsVisibleTo("U2fWin10.Test")]
 
 namespace U2fWin10
 {
@@ -30,11 +33,6 @@ namespace U2fWin10
             var keyHandlePtr = CopyToUnmanaged(keyHandle);
             var credentialPtr = CopyToUnmanaged(new WEBAUTHN_CREDENTIAL(keyHandle.Length, keyHandlePtr));
             var assertionPtr = IntPtr.Zero;
-
-            // TODO: Move this to the test
-            var size = Marshal.SizeOf<WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS>();
-            if (!((IntPtr.Size == 8 && size == 88) || (IntPtr.Size == 4 && size == 52)))
-                throw new InvalidOperationException();
 
             try
             {
