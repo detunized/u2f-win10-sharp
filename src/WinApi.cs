@@ -43,13 +43,13 @@ namespace U2fWin10
                 var authData = new byte[assertion.cbAuthenticatorData];
                 Marshal.Copy(assertion.pbAuthenticatorData, authData, 0, assertion.cbAuthenticatorData);
 
-                // TODO: Free assertion!!!
-
                 return (signature, authData);
             }
             finally
             {
-                FreeUnmanaged(ref assertionPtr);
+                if (assertionPtr != IntPtr.Zero)
+                    WebAuthNFreeAssertion(assertionPtr);
+
                 FreeUnmanaged(ref credentialPtr);
                 FreeUnmanaged(ref keyHandlePtr);
                 FreeUnmanaged(ref clientDataPtr);
@@ -100,6 +100,9 @@ namespace U2fWin10
             [In] WEBAUTHN_CLIENT_DATA pWebAuthNClientData,
             [In, Optional] WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS pWebAuthNGetAssertionOptions,
             [Out] out IntPtr ppWebAuthNAssertion);
+
+        [DllImport("webauthn.dll", EntryPoint = "WebAuthNFreeAssertion", CharSet = CharSet.Unicode)]
+        internal static extern void WebAuthNFreeAssertion([In] IntPtr pWebAuthNAssertion);
 
         internal enum WebAuthnResult : uint
         {
