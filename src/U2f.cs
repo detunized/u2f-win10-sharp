@@ -46,7 +46,7 @@ namespace U2fWin10
             var clientDataJson = $"{{\"challenge\":\"{challenge}\",\"origin\":\"{origin}\",\"typ\":\"navigator.id.getAssertion\"}}";
             var clientDataBytes = clientDataJson.ToBytes();
 
-            var result = WinApi.Sign(version: WinApi.VersionFido2,
+            var result = WinApi.Sign(version: WinApi.VersionU2F,
                                      appId: appId,
                                      clientData: clientDataBytes,
                                      keyHandle: keyHandle.DecodeBase64UrlSafe(),

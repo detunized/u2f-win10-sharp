@@ -115,7 +115,7 @@ namespace U2fWin10
         {
             // Version of this structure, to allow for modifications in the future.
             // This field is required and should be set to CURRENT_VERSION above.
-            private /* DWORD */ int dwVersion ;
+            private /* DWORD */ int dwVersion;
 
             // Size of the pbClientDataJSON field.
             private /* DWORD */ int cbClientDataJSON;
