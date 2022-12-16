@@ -2,7 +2,6 @@
 // Licensed under the terms of the MIT license. See LICENCE for details.
 
 using System;
-using System.Text;
 using U2fWin10;
 
 namespace U2fWin10Example
@@ -11,12 +10,54 @@ namespace U2fWin10Example
     {
         static void Main(string[] args)
         {
-            var appId = "https://snappy.local/app-id.json";
-            var challenge = Encoding.UTF8.GetBytes("{\"challenge\":\"zImw3II_G5JKACzFB4I1FLFTmo2lmEs4Jg2gOP2dYNk\",\"origin\":\"https://snappy.local\",\"typ\":\"navigator.id.getAssertion\"}");
-            var keyHandle = Convert.FromBase64String("mizejqv8eHXSToeUEbxLzT65XIvIKY5YJdzSKGhvtP7SHDo/o4IXuEuGdajO172g1pXE2DZ+veI5/mmVCiZp4Q==");
+            int apiVersion = U2f.GetApiVersion();
+            Console.WriteLine($"API version: {apiVersion}");
 
-            var signature = U2f.Sign(appId, challenge, keyHandle);
-            Console.WriteLine(Convert.ToBase64String(signature));
+            try
+            {
+                var r1 = U2f.GetAssertion(appId: "https://snappy.local/app-id.json",
+                                          challenge: "zImw3II_G5JKACzFB4I1FLFTmo2lmEs4Jg2gOP2dYNk",
+                                          origin: "https://snappy.local",
+                                          keyHandle:
+                                          "mizejqv8eHXSToeUEbxLzT65XIvIKY5YJdzSKGhvtP7SHDo_o4IXuEuGdajO172g1pXE2DZ-veI5_mmVCiZp4Q");
+
+                Console.WriteLine("U2F");
+                Console.WriteLine($"ClientData: {r1.ClientData}");
+                Console.WriteLine($"KeyHandle: {r1.KeyHandle}");
+                Console.WriteLine($"Signature: {r1.Signature}");
+            }
+            catch (CanceledException e)
+            {
+                Console.WriteLine($"Canceled: '{e.Message}'");
+            }
+            catch (ErrorException e)
+            {
+                Console.WriteLine($"Error: '{e.Message}'");
+            }
+
+            try
+            {
+                var r2 = WebAuthN.GetAssertion(appId: "1password.com",
+                                               challenge: "z6TQzWKemfqfkG0-uOeqAGu07-2DM1Pr68MdYbRp6oA",
+                                               origin: "https://my.1password.com",
+                                               crossOrigin: false,
+                                               keyHandle:
+                                               "4dVObe0KpHxfqCGs-8_-xGQ6aovw8AJ4ZIofcVPLWPJtbpRPu7Uew9kVosWNfU2j-we25axbAktN9N7OJhYODg");
+
+                Console.WriteLine("WebAuthn");
+                Console.WriteLine($"ClientData: {r2.ClientData}");
+                Console.WriteLine($"KeyHandle: {r2.KeyHandle}");
+                Console.WriteLine($"Signature: {r2.Signature}");
+                Console.WriteLine($"AuthData: {r2.AuthData}");
+            }
+            catch (CanceledException e)
+            {
+                Console.WriteLine($"Canceled: '{e.Message}'");
+            }
+            catch (ErrorException e)
+            {
+                Console.WriteLine($"Error: '{e.Message}'");
+            }
         }
     }
 }

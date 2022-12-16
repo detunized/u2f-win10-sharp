@@ -1,24 +1,11 @@
-// Copyright (C) 2019 Dmitry Yakimenko (detunized@gmail.com).
-// Licensed under the terms of the MIT license. See LICENCE for details.
-
-using System;
-using System.Runtime.CompilerServices;
+﻿using System;
 using System.Runtime.InteropServices;
-
-[assembly: InternalsVisibleTo("U2fWin10.Test")]
 
 namespace U2fWin10
 {
-    public static class U2f
+    internal static class WinApi
     {
-        // TODO: Support multiple keys
-        // TODO: Report errors
-        public static byte[] Sign(string appId, byte[] challenge, byte[] keyHandle)
-        {
-            return Sign(appId, challenge, keyHandle, GetForegroundWindow());
-        }
-
-        public static byte[] Sign(string appId, byte[] challenge, byte[] keyHandle, IntPtr windowHandle)
+        public static (byte[] Signature, byte[] AuthData) Sign(int version, string appId, byte[] clientData, byte[] keyHandle, IntPtr windowHandle)
         {
             // It's all a bit ugly here with the unmanaged memory management.
             // It's easier to allocate all at the top and then free when we're
@@ -28,8 +15,7 @@ namespace U2fWin10
             // difficult to track nested structures with IntPtr's in them that
             // have to be freed.
 
-            // TODO: SHA-256 the challenge
-            var challengePtr = CopyToUnmanaged(challenge);
+            var clientDataPtr = CopyToUnmanaged(clientData);
             var keyHandlePtr = CopyToUnmanaged(keyHandle);
             var credentialPtr = CopyToUnmanaged(new WEBAUTHN_CREDENTIAL(keyHandle.Length, keyHandlePtr));
             var assertionPtr = IntPtr.Zero;
@@ -39,27 +25,34 @@ namespace U2fWin10
                 var result = WebAuthNAuthenticatorGetAssertion(
                     windowHandle,
                     appId,
-                    new WEBAUTHN_CLIENT_DATA(challenge.Length, challengePtr),
+                    new WEBAUTHN_CLIENT_DATA(version, clientData.Length, clientDataPtr),
                     new WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS(1, credentialPtr),
                     out assertionPtr);
 
-                if (result != WebAuthnResult.Ok || assertionPtr == IntPtr.Zero)
-                    return null;
+                if (result == WebAuthnResult.Canceled)
+                    throw new CanceledException();
+
+                if (result != WebAuthnResult.Ok)
+                    throw new ErrorException($"Error code: ${result}");
 
                 var assertion = Marshal.PtrToStructure<WEBAUTHN_ASSERTION>(assertionPtr);
 
-                var signature = new byte[assertion.cbSignature + 5];
-                Marshal.Copy(assertion.pbAuthenticatorData + assertion.cbAuthenticatorData - 5, signature, 0, 5);
-                Marshal.Copy(assertion.pbSignature, signature, 5, assertion.cbSignature);
+                var signature = new byte[assertion.cbSignature];
+                Marshal.Copy(assertion.pbSignature, signature, 0, assertion.cbSignature);
 
-                return signature;
+                var authData = new byte[assertion.cbAuthenticatorData];
+                Marshal.Copy(assertion.pbAuthenticatorData, authData, 0, assertion.cbAuthenticatorData);
+
+                // TODO: Free assertion!!!
+
+                return (signature, authData);
             }
             finally
             {
                 FreeUnmanaged(ref assertionPtr);
                 FreeUnmanaged(ref credentialPtr);
                 FreeUnmanaged(ref keyHandlePtr);
-                FreeUnmanaged(ref challengePtr);
+                FreeUnmanaged(ref clientDataPtr);
             }
         }
 
@@ -97,6 +90,9 @@ namespace U2fWin10
         [DllImport("user32.dll")]
         internal static extern IntPtr GetForegroundWindow();
 
+        [DllImport("webauthn.dll", EntryPoint = "WebAuthNGetApiVersionNumber")]
+        internal static extern uint WebAuthNGetApiVersionNumber();
+
         [DllImport("webauthn.dll", EntryPoint = "WebAuthNAuthenticatorGetAssertion", CharSet = CharSet.Unicode)]
         internal static extern WebAuthnResult WebAuthNAuthenticatorGetAssertion(
             [In] IntPtr hWnd,
@@ -111,13 +107,15 @@ namespace U2fWin10
             Canceled = 0x800704C7
         }
 
-        // Information about client data.
+        internal const int VersionU2F = 1;
+        internal const int VersionFido2 = 2;
+
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         internal sealed class WEBAUTHN_CLIENT_DATA
         {
             // Version of this structure, to allow for modifications in the future.
             // This field is required and should be set to CURRENT_VERSION above.
-            private /* DWORD */ int dwVersion = 1;
+            private /* DWORD */ int dwVersion ;
 
             // Size of the pbClientDataJSON field.
             private /* DWORD */ int cbClientDataJSON;
@@ -128,14 +126,14 @@ namespace U2fWin10
             // Hash algorithm ID used to hash the pbClientDataJSON field.
             private /* LPCWSTR */ string pwszHashAlgId = "SHA-256";
 
-            public WEBAUTHN_CLIENT_DATA(int length, IntPtr ptr)
+            public WEBAUTHN_CLIENT_DATA(int version, int length, IntPtr ptr)
             {
+                dwVersion = version;
                 cbClientDataJSON = length;
                 pbClientDataJSON = ptr;
             }
         }
 
-        // Options.
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         internal sealed class WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS
         {

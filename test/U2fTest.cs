@@ -9,7 +9,7 @@ namespace U2fWin10.Test
         [Fact]
         public void Size_of_WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_is_correct()
         {
-            var size = Marshal.SizeOf<U2f.WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS>();
+            var size = Marshal.SizeOf<WinApi.WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS>();
             switch (IntPtr.Size)
             {
             case 4:
