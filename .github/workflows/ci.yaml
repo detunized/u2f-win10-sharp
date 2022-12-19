@@ -1,19 +1,41 @@
 name: CI
 
-on: [push]
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - v*
+  pull_request:
+    branches: [master]
 
 jobs:
   build:
-
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v1
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v1
-      with:
-        dotnet-version: 3.1.100
-    - name: Test x64
-      run: dotnet test --configuration Release --runtime win-x64
-    - name: Test x86
-      run: dotnet test --configuration Release --runtime win-x86
+      # Check out the repo
+      - uses: actions/checkout@v3
+
+      # Install .NET
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '5.0.x'
+
+      # Build everything
+      - name: Build the executables
+        run: |
+          dotnet build --configuration Release
+
+      # Run tests
+      - name: Test
+        run: dotnet test --configuration Release --no-build
+
+      # Build NuGet package
+      - name: Build the NuGet package
+        run: dotnet pack --configuration Release --no-build
+
+      # Push the NuGet package
+      - name: Push the NuGet package
+        if: contains(github.ref, "refs/tags/")
+        run: dotnet nuget push --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json src\bin\Release\*.nupkg
