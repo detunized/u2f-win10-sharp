@@ -37,5 +37,5 @@ jobs:
 
       # Push the NuGet package
       - name: Push the NuGet package
-        if: contains(github.ref, "refs/tags/")
+        if: contains(github.ref, 'refs/tags/')
         run: dotnet nuget push --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json src\bin\Release\*.nupkg
