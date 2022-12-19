@@ -4,13 +4,13 @@
 using System;
 using U2fWin10;
 
-namespace U2fWin10Example
+namespace Example
 {
-    class Program
+    internal static class Program
     {
-        static void Main(string[] args)
+        public static void Main(string[] args)
         {
-            int apiVersion = U2f.GetApiVersion();
+            var apiVersion = U2f.GetApiVersion();
             Console.WriteLine($"API version: {apiVersion}");
 
             try
