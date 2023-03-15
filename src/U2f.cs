@@ -3,6 +3,7 @@
 
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 [assembly: InternalsVisibleTo("U2fWin10.Test")]
 
@@ -12,6 +13,8 @@ namespace U2fWin10
     {
         public static int GetApiVersion()
         {
+            ThrowIfNotOnWindows();
+
             return (int)WinApi.WebAuthNGetApiVersionNumber();
         }
 
@@ -34,6 +37,8 @@ namespace U2fWin10
                                              string origin,
                                              string keyHandle)
         {
+            ThrowIfNotOnWindows();
+
             return GetAssertion(appId, challenge, origin, keyHandle, WinApi.GetForegroundWindow());
         }
 
@@ -43,6 +48,8 @@ namespace U2fWin10
                                              string keyHandle,
                                              IntPtr windowHandle)
         {
+            ThrowIfNotOnWindows();
+
             var clientDataJson = $"{{\"challenge\":\"{challenge}\",\"origin\":\"{origin}\",\"typ\":\"navigator.id.getAssertion\"}}";
             var clientDataBytes = clientDataJson.ToBytes();
 
@@ -60,6 +67,18 @@ namespace U2fWin10
             return new Assertion(clientData: clientDataBytes.ToBaseBase64UrlSafe(),
                                  keyHandle: keyHandle,
                                  signature: result.Signature.ToBaseBase64UrlSafe());
+        }
+
+        //
+        // Private
+        //
+
+        private static void ThrowIfNotOnWindows()
+        {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return;
+
+            throw new NotSupportedException("This platform is not supported");
         }
     }
 }
