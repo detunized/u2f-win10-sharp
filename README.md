@@ -11,6 +11,10 @@ administrator) to interact with a U2F device in such a way. The only way to do
 it in the user mode is to use the [Windows native API][api] for this. This is
 what this library does.
 
+## Changes
+
+See [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
 The library is released under [the MIT license][mit]. See [LICENSE][license]
