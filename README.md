@@ -9,7 +9,7 @@ libraries is that they usually interact with the USB U2F devices via a HID
 layer. Starting with build 1903 Windows requires elevated privileges (run as
 administrator) to interact with a U2F device in such a way. The only way to do
 it in the user mode is to use the [Windows native API][api] for this. This is
-what this library does. 
+what this library does.
 
 ## License
 

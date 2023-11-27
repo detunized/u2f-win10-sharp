@@ -2,6 +2,7 @@
 // Licensed under the terms of the MIT license. See LICENCE for details.
 
 using System;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -13,7 +14,7 @@ namespace U2fWin10
     {
         public static int GetApiVersion()
         {
-            ThrowIfNotOnWindows();
+            Utils.ThrowIfNotOnWindows();
 
             return (int)WinApi.WebAuthNGetApiVersionNumber();
         }
@@ -37,9 +38,15 @@ namespace U2fWin10
                                              string origin,
                                              string keyHandle)
         {
-            ThrowIfNotOnWindows();
+            return GetAssertion(appId, challenge, origin, new[] { keyHandle });
+        }
 
-            return GetAssertion(appId, challenge, origin, keyHandle, WinApi.GetForegroundWindow());
+        public static Assertion GetAssertion(string appId,
+                                             string challenge,
+                                             string origin,
+                                             string[] keyHandles)
+        {
+            return GetAssertion(appId, challenge, origin, keyHandles, WinApi.GetForegroundWindow());
         }
 
         public static Assertion GetAssertion(string appId,
@@ -48,7 +55,16 @@ namespace U2fWin10
                                              string keyHandle,
                                              IntPtr windowHandle)
         {
-            ThrowIfNotOnWindows();
+            return GetAssertion(appId, challenge, origin, new[] { keyHandle }, windowHandle);
+        }
+
+        public static Assertion GetAssertion(string appId,
+                                             string challenge,
+                                             string origin,
+                                             string[] keyHandles,
+                                             IntPtr windowHandle)
+        {
+            Utils.ThrowIfNotOnWindows();
 
             var clientDataJson = $"{{\"challenge\":\"{challenge}\",\"origin\":\"{origin}\",\"typ\":\"navigator.id.getAssertion\"}}";
             var clientDataBytes = clientDataJson.ToBytes();
@@ -56,7 +72,7 @@ namespace U2fWin10
             var result = WinApi.Sign(version: WinApi.VersionU2F,
                                      appId: appId,
                                      clientData: clientDataBytes,
-                                     keyHandle: keyHandle.DecodeBase64UrlSafe(),
+                                     keyHandles: keyHandles.Select(x => x.DecodeBase64UrlSafe()).ToArray(),
                                      windowHandle: windowHandle);
 
             // Combine the last 5 bytes of the auth data and the signature.
@@ -65,20 +81,8 @@ namespace U2fWin10
             Array.Copy(result.Signature, 0, signature, 5, result.Signature.Length);
 
             return new Assertion(clientData: clientDataBytes.ToBaseBase64UrlSafe(),
-                                 keyHandle: keyHandle,
+                                 keyHandle: result.keyHandle.ToBaseBase64UrlSafe(),
                                  signature: result.Signature.ToBaseBase64UrlSafe());
-        }
-
-        //
-        // Private
-        //
-
-        private static void ThrowIfNotOnWindows()
-        {
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                return;
-
-            throw new NotSupportedException("This platform is not supported");
         }
     }
 }

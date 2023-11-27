@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 namespace U2fWin10
 {
@@ -26,7 +27,16 @@ namespace U2fWin10
                                              bool crossOrigin,
                                              string keyHandle)
         {
-            return GetAssertion(appId, challenge, origin, crossOrigin, keyHandle, WinApi.GetForegroundWindow());
+            return GetAssertion(appId, challenge, origin, crossOrigin, new[] { keyHandle });
+        }
+
+        public static Assertion GetAssertion(string appId,
+                                             string challenge,
+                                             string origin,
+                                             bool crossOrigin,
+                                             string[] keyHandles)
+        {
+            return GetAssertion(appId, challenge, origin, crossOrigin, keyHandles, WinApi.GetForegroundWindow());
         }
 
         public static Assertion GetAssertion(string appId,
@@ -36,6 +46,18 @@ namespace U2fWin10
                                              string keyHandle,
                                              IntPtr windowHandle)
         {
+            return GetAssertion(appId, challenge, origin, crossOrigin, new[] { keyHandle }, windowHandle);
+        }
+
+        public static Assertion GetAssertion(string appId,
+                                             string challenge,
+                                             string origin,
+                                             bool crossOrigin,
+                                             string[] keyHandles,
+                                             IntPtr windowHandle)
+        {
+            Utils.ThrowIfNotOnWindows();
+
             var crossOriginLowerCase = crossOrigin ? "true" : "false";
             var clientDataJson = $"{{\"type\":\"webauthn.get\",\"challenge\":\"{challenge}\",\"origin\":\"{origin}\",\"crossOrigin\":{crossOriginLowerCase}}}";
             var clientDataBytes = clientDataJson.ToBytes();
@@ -43,12 +65,12 @@ namespace U2fWin10
             var result = WinApi.Sign(version: WinApi.VersionFido2,
                                      appId: appId,
                                      clientData: clientDataBytes,
-                                     keyHandle: keyHandle.DecodeBase64UrlSafe(),
+                                     keyHandles: keyHandles.Select(x => x.DecodeBase64UrlSafe()).ToArray(),
                                      windowHandle: windowHandle);
 
             return new Assertion(clientData: clientDataBytes.ToBaseBase64UrlSafe(),
-                                 keyHandle: keyHandle, 
-                                 signature: result.Signature.ToBaseBase64UrlSafe(), 
+                                 keyHandle: result.keyHandle.ToBaseBase64UrlSafe(),
+                                 signature: result.Signature.ToBaseBase64UrlSafe(),
                                  authData: result.AuthData.ToBaseBase64UrlSafe());
         }
     }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace U2fWin10
@@ -16,7 +17,7 @@ namespace U2fWin10
                 .Replace('-', '+')
                 .Replace('_', '/')
                 .TrimEnd('=');
-            
+
             switch (regularBase64.Length % 4)
             {
                 case 2:
@@ -26,7 +27,7 @@ namespace U2fWin10
                     regularBase64 += "=";
                     break;
             }
-            
+
             return Convert.FromBase64String(regularBase64);
         }
 
@@ -36,6 +37,14 @@ namespace U2fWin10
                 .Replace('+', '-')
                 .Replace('/', '_')
                 .TrimEnd('=');
+        }
+
+        public static void ThrowIfNotOnWindows()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return;
+
+            throw new NotSupportedException("This platform is not supported");
         }
     }
 }
